@@ -58,3 +58,9 @@ directory or a previous context directory) on leave.
 ### Chroot Contexts
 
 TODO: describe the effects of chroot contexts in more detail.
+
+## Examples
+
+[Debian Tarball Spec](tree/main/examples/debian/spec.yml)
+
+[Gentoo Tarball Spec](tree/main/examples/gentoo/spec.yml)
