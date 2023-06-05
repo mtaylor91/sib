@@ -16,7 +16,7 @@ data Step
   = RunCommand { command :: [Text] }
   | RunCommands { commands :: [[Text]] }
   | WriteFile { file :: Text, content :: Text }
-  | DownloadFile { file :: Text, url :: Text }
+  | DownloadFile { file :: Text, sha512 :: Text, url :: Text }
   | EnterContext { enter :: Context }
   | LeaveContext { leave :: Context }
   deriving (Show)
@@ -44,8 +44,8 @@ stepFromSpec _ (Lib.Spec.RunCommands commands) =
   pure $ Lib.Steps.RunCommands commands
 stepFromSpec _ (Lib.Spec.WriteFile file content) =
   pure $ Lib.Steps.WriteFile file content
-stepFromSpec _ (Lib.Spec.DownloadFile file url) =
-  pure $ Lib.Steps.DownloadFile file url
+stepFromSpec _ (Lib.Spec.DownloadFile file sha512 url) =
+  pure $ Lib.Steps.DownloadFile file sha512 url
 stepFromSpec contexts (Lib.Spec.EnterContext name) =
   case Lib.Steps.EnterContext <$> contextFromSpec contexts name of
     Just step -> pure step

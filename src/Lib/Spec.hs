@@ -26,7 +26,7 @@ data SpecStep
   = RunCommand { command :: [Text] }
   | RunCommands { commands :: [[Text]] }
   | WriteFile { file :: Text, content :: Text }
-  | DownloadFile { file :: Text, url :: Text }
+  | DownloadFile { file :: Text, sha512 :: Text, url :: Text }
   | EnterContext { enter :: Text }
   | LeaveContext { leave :: Text }
   deriving (Show, Generic)

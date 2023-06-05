@@ -69,13 +69,11 @@ executeCommands = foldM executeCommand
 
 runCommand :: State -> [T.Text] -> IO State
 runCommand state command = do
-  putStrLn ""
   putStrLn "Running command:"
   executeCommand state command
 
 
 runCommands :: State -> [[T.Text]] -> IO State
 runCommands state commands = do
-  putStrLn ""
   putStrLn "Running commands:"
   executeCommands state commands

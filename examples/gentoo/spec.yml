@@ -47,4 +47,5 @@ steps:
 - enter: wrapper
 - enter: build
 - file: gentoo-stage3-amd64-systemd-mergedusr.tar.xz
+  sha512: 9338f0611fd47052e4df5cbb9dcf30500ab8bde3c33be095d7ee717d5ec35ca14a798083295d2d9042b1b15a55efb0a6b742f25f4435be7dca0bce144c7c0758
   url: https://bouncer.gentoo.org/fetch/root/all/releases/amd64/autobuilds/20230604T170201Z/stage3-amd64-systemd-mergedusr-20230604T170201Z.tar.xz
