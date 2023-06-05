@@ -1,0 +1,50 @@
+name: yakd-gentoo
+
+contexts:
+
+# wrapper context creates the build tmpfs directory on enter and cleans it up on leave
+- name: wrapper
+  enter:
+  - ["mkdir", "-p", "build/tmpfs"]
+  leave:
+  - ["rmdir", "build/tmpfs"]
+
+# build directory context
+- directory: build
+
+# tmpfs context mounts the tmpfs for speedier building and easy clean-up
+- name: tmpfs
+  enter:
+  - ["mount", "-t", "tmpfs", "tmpfs", "tmpfs"]
+  leave:
+  - ["umount", "tmpfs"]
+
+# tmpfs directory context
+- directory: tmpfs
+
+# chroot metadata filesystem mount context
+- name: chroot_mounts
+  enter:
+  - ["mount", "-t", "proc", "/proc", "./proc"]
+  - ["mount", "--rbind", "/dev", "./dev"]
+  - ["mount", "--make-rslave", "./dev"]
+  - ["mount", "--rbind", "/sys", "./sys"]
+  - ["mount", "--make-rslave", "./sys"]
+  - ["mount", "--bind", "/run", "./run"]
+  - ["mount", "--make-slave", "./run"]
+  leave:
+  - ["umount", "-R", "./proc"]
+  - ["umount", "-R", "./dev/pts"]
+  - ["umount", "-R", "./dev/shm"]
+  - ["umount", "-R", "./dev"]
+  - ["umount", "-R", "./sys"]
+  - ["umount", "-R", "./run"]
+
+# build tmpfs chroot context
+- chroot: .
+
+steps:
+- enter: wrapper
+- enter: build
+- file: gentoo-stage3-amd64-systemd-mergedusr.tar.xz
+  url: https://bouncer.gentoo.org/fetch/root/all/releases/amd64/autobuilds/20230604T170201Z/stage3-amd64-systemd-mergedusr-20230604T170201Z.tar.xz

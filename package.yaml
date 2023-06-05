@@ -1,0 +1,64 @@
+name:                sib
+version:             0.1.0.0
+github:              "mtaylor91/sib"
+license:             BSD3
+author:              "Mike Taylor"
+maintainer:          "mike.charles.taylor@gmail.com"
+copyright:           "2023 Mike Taylor"
+
+extra-source-files:
+- README.md
+- CHANGELOG.md
+
+synopsis:            System Image Builder
+category:            DevOps
+
+description:         Please see the README on GitHub at <https://github.com/mtaylor91/sib#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- aeson >= 2.0 && < 2.1
+- bytestring >= 0.11 && < 0.12
+- directory >= 1.3 && < 1.4
+- http-client >= 0.7 && < 0.8
+- http-client-tls >= 0.3 && < 0.4
+- process >= 1.6 && < 1.7
+- text >= 1.2 && < 1.3
+- unix >= 2.7 && < 2.8
+- yaml >= 0.11 && < 0.12
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wmissing-export-lists
+- -Wmissing-home-modules
+- -Wpartial-fields
+- -Wredundant-constraints
+
+library:
+  source-dirs: src
+
+executables:
+  sib-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - sib
+
+tests:
+  sib-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - sib

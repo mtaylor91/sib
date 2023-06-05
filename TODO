@@ -1,0 +1,3 @@
+- Smarter file download step output
+- Implement parameter templating for files
+- Implement parameter templating for commands

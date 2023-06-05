@@ -1,0 +1,13 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "sib:lib"
+
+    - path: "./app/Main.hs"
+      component: "sib:exe:sib-exe"
+
+    - path: "./app/Paths_sib.hs"
+      component: "sib:exe:sib-exe"
+
+    - path: "./test"
+      component: "sib:test:sib-test"
