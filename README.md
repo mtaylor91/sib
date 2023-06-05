@@ -61,6 +61,6 @@ TODO: describe the effects of chroot contexts in more detail.
 
 ## Examples
 
-[Debian Tarball Spec](tree/main/examples/debian/spec.yml)
+[Debian Tarball Spec](examples/debian/spec.yml)
 
-[Gentoo Tarball Spec](tree/main/examples/gentoo/spec.yml)
+[Gentoo Tarball Spec](examples/gentoo/spec.yml)
