@@ -52,16 +52,14 @@ loadSpec path = do
   specYaml <- BS.readFile path
   spec <- Y.decodeThrow specYaml
   let contextNames = map contextName $ contexts spec
-  case contextNames of
+  case findDuplicates [] contextNames contextNames of
     [] -> pure spec
-    (n:ns) ->
-      case findDuplicate n ns of
-        Nothing -> pure spec
-        Just duplicate -> fail $ "Duplicate context: " ++ show duplicate
+    duplicate:_ -> fail $ "Duplicate context(s): " ++ show duplicate
   where
-    findDuplicate :: Eq a => a -> [a] -> Maybe a
-    findDuplicate _ [] = Nothing
-    findDuplicate x (y:ys) =
-      if x == y
-        then Just x
-        else findDuplicate x ys
+    findDuplicates :: Eq a => [a] -> [a] -> [a] -> [a]
+    findDuplicates duplicates [] _ = duplicates
+    findDuplicates duplicates (x:xs) ys =
+      case Prelude.filter (== x) ys of
+        [] -> findDuplicates duplicates xs ys
+        [_] -> findDuplicates duplicates xs ys
+        _ -> findDuplicates (x:duplicates) xs ys

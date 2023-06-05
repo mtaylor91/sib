@@ -2,25 +2,25 @@ name: yakd-gentoo
 
 contexts:
 
-# wrapper context creates the build tmpfs directory on enter and cleans it up on leave
+# wrapper context creates the build rootfs directory on enter and cleans it up on leave
 - name: wrapper
   enter:
-  - ["mkdir", "-p", "build/tmpfs"]
+  - ["mkdir", "-p", "build/rootfs"]
   leave:
-  - ["rmdir", "build/tmpfs"]
+  - ["rmdir", "build/rootfs"]
 
 # build directory context
 - directory: build
 
-# tmpfs context mounts the tmpfs for speedier building and easy clean-up
-- name: tmpfs
+# mount context mounts the tmpfs for speedier building and easy clean-up
+- name: mount_rootfs
   enter:
-  - ["mount", "-t", "tmpfs", "tmpfs", "tmpfs"]
+  - ["mount", "-t", "tmpfs", "tmpfs", "rootfs"]
   leave:
-  - ["umount", "tmpfs"]
+  - ["umount", "rootfs"]
 
-# tmpfs directory context
-- directory: tmpfs
+# rootfs directory context
+- directory: build/rootfs
 
 # chroot metadata filesystem mount context
 - name: chroot_mounts
@@ -40,7 +40,7 @@ contexts:
   - ["umount", "-R", "./sys"]
   - ["umount", "-R", "./run"]
 
-# build tmpfs chroot context
+# build rootfs chroot context
 - chroot: .
 
 steps:
@@ -49,3 +49,27 @@ steps:
 - file: gentoo-stage3-amd64-systemd-mergedusr.tar.xz
   sha512: 9338f0611fd47052e4df5cbb9dcf30500ab8bde3c33be095d7ee717d5ec35ca14a798083295d2d9042b1b15a55efb0a6b742f25f4435be7dca0bce144c7c0758
   url: https://bouncer.gentoo.org/fetch/root/all/releases/amd64/autobuilds/20230604T170201Z/stage3-amd64-systemd-mergedusr-20230604T170201Z.tar.xz
+- enter: mount_rootfs
+- command:
+  - tar
+  - -xpf
+  - gentoo-stage3-amd64-systemd-mergedusr.tar.xz
+  - -C
+  - rootfs
+  - --xattrs-include='*.*'
+  - --numeric-owner
+- enter: build/rootfs
+- enter: chroot_mounts
+- enter: chroot
+- file: /etc/locale.gen
+  content: |
+    en_CA.UTF-8 UTF-8
+    en_US.UTF-8 UTF-8
+- command: ["locale-gen"]
+- leave: chroot
+- leave: chroot_mounts
+- leave: build/rootfs
+- command: ["tar", "-C", "rootfs", "-caf", "yakd-gentoo-x86_64.tar.xz", "."]
+- leave: mount_rootfs
+- leave: build
+- leave: wrapper

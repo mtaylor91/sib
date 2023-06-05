@@ -34,7 +34,6 @@ resolveRelative state path =
 writeFile :: State -> T.Text -> T.Text -> IO State
 writeFile state file content = if failed state then pure state else do
   let realFile = resolveFile state file
-  putStrLn ""
   putStrLn $ "Writing file: " ++ realFile
   putStrLn $ "  " ++ T.unpack indentedContent
   catch (doWriteFile realFile) $ \e -> do
