@@ -22,7 +22,7 @@ resolveRoot :: State -> FilePath -> FilePath
 resolveRoot state path =
   case chrootDirectory state of
     Just chroot -> chroot ++ "/" ++ path
-    Nothing -> path
+    Nothing -> error "Unexpected root-relative path"
 
 
 resolveRelative :: State -> FilePath -> FilePath

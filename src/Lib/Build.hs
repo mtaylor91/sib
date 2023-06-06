@@ -17,6 +17,7 @@ import Lib.File (writeFile)
 import Lib.HTTP (downloadFile)
 import Lib.Spec
 import Lib.State
+import Lib.Validate
 
 
 buildImage :: Spec -> IO ()
@@ -26,12 +27,31 @@ buildImage spec = do
       exitSignalSet = addSignal sigQUIT $ addSignal sigTERM emptySignalSet
   _ <- installHandler sigINT (Catch handleInterrupt) $ Just exitSignalSet
   cwd <- getCurrentDirectory
-  state <- runSteps (steps spec) $ State
-    { contextStack = []
-    , startingDirectory = cwd
-    , failed = False
-    }
-  when (failed state) $ throw BuildFailed
+  let state = State
+        { spec = spec
+        , contextStack = []
+        , startingDirectory = cwd
+        , stepsRemaining = steps spec
+        , failed = False
+        }
+  validateState state
+  state' <- runState state
+  when (failed state') $ throw BuildFailed
+  putStrLn ""
+  putStrLn "Build finished."
+
+
+dispatchStep :: State -> Step -> IO State
+dispatchStep state (DownloadFile file sha512 url) =
+  downloadFile state (T.unpack file) (T.unpack sha512) (T.unpack url)
+dispatchStep state (EnterContext name ctx) =
+  enterContext state name ctx
+dispatchStep state (LeaveContext name) = do
+  leaveContext state name
+dispatchStep state (RunCommands commands) =
+  runCommands state commands
+dispatchStep state (WriteFile file content) =
+  Lib.File.writeFile state file content
 
 
 enterContext :: State -> T.Text -> Context -> IO State
@@ -79,37 +99,26 @@ leaveRemainingContexts state =
       leaveRemainingContexts state'
 
 
-runSteps :: [Step] -> State -> IO State
-runSteps [] state =
-  leaveRemainingContexts state
-runSteps (step:steps) state =
-  if failed state
-    then case step of
-      LeaveContext _ -> doRunStep
-      _ -> skipRunStep
-    else doRunStep
+runState :: State -> IO State
+runState state =
+  case stepsRemaining state of
+    [] -> leaveRemainingContexts state
+    step:stepsRemaining' ->
+      if failed state
+        then case step of
+          LeaveContext _ ->
+            doRunStep step stepsRemaining'
+          _ -> skipRunStep stepsRemaining'
+        else doRunStep step stepsRemaining'
   where
-    doRunStep :: IO State
-    doRunStep = do
+    doRunStep :: Step -> [Step] -> IO State
+    doRunStep step stepsRemaining' = do
       state' <- catchFail state $ runStep state step
-      runSteps steps state'
-    skipRunStep :: IO State
-    skipRunStep = do
-      runSteps steps state
+      runState $ state' { stepsRemaining = stepsRemaining' }
+    skipRunStep :: [Step] -> IO State
+    skipRunStep stepsRemaining' =
+      runState $ state { stepsRemaining = stepsRemaining' }
 
 
 runStep :: State -> Step -> IO State
-runStep state step = putStrLn "" >> runStepDispatch state step
-
-
-runStepDispatch :: State -> Step -> IO State
-runStepDispatch state (DownloadFile file sha512 url) =
-  downloadFile state (T.unpack file) (T.unpack sha512) (T.unpack url)
-runStepDispatch state (EnterContext name ctx) =
-  enterContext state name ctx
-runStepDispatch state (LeaveContext name) = do
-  leaveContext state name
-runStepDispatch state (RunCommands commands) =
-  runCommands state commands
-runStepDispatch state (WriteFile file content) =
-  Lib.File.writeFile state file content
+runStep state step = putStrLn "" >> dispatchStep state step

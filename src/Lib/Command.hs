@@ -6,6 +6,7 @@ module Lib.Command
   ) where
 
 import Control.Concurrent (forkIO)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Monad
 import qualified Data.Text as T
 import System.IO (Handle, hGetLine, hIsEOF)
@@ -46,9 +47,11 @@ executeCommand state command =
             , std_out = UseHandle writeFD
             , std_err = UseHandle writeFD
             }
+      outputSync <- newEmptyMVar
       (_, _, _, ph) <- createProcess process
-      _ <- forkIO $ writeCommandOutput readFD
+      _ <- forkIO $ writeCommandOutput readFD >> putMVar outputSync ()
       exitCode <- waitForProcess ph
+      takeMVar outputSync
       case exitCode of
         ExitSuccess -> pure state
         ExitFailure code -> do

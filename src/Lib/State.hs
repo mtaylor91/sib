@@ -13,8 +13,10 @@ import Lib.Spec
 
 
 data State = State
-  { contextStack :: [(T.Text, Context)]
+  { spec :: Spec
+  , contextStack :: [(T.Text, Context)]
   , startingDirectory :: FilePath
+  , stepsRemaining :: [Step]
   , failed :: Bool
   } deriving (Show)
 

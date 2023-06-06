@@ -35,6 +35,7 @@ library
       Lib.HTTP
       Lib.Spec
       Lib.State
+      Lib.Validate
   other-modules:
       Paths_sib
   hs-source-dirs:

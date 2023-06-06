@@ -67,25 +67,31 @@ loadSpec :: FilePath -> IO Spec
 loadSpec path = do
   specYaml <- BS.readFile path
   spec <- Y.decodeThrow specYaml
+  validateSpec spec
+
+
+validateSpec :: Spec -> IO Spec
+validateSpec spec = do
   let enterContextNames = collectEnterContextNames [] $ steps spec
-  verifyLeaveContextSteps enterContextNames $ steps spec
-  case findDuplicates [] enterContextNames enterContextNames of
+  case findConflictingContexts [] enterContextNames enterContextNames of
     duplicate:_ -> fail $ "Duplicate context(s): " ++ show duplicate
-    [] -> pure spec
+    [] -> do
+      verifyLeaveContextSteps enterContextNames $ steps spec
+      pure spec
   where
-    findDuplicates :: Eq a => [a] -> [a] -> [a] -> [a]
-    findDuplicates duplicates [] _ = duplicates
-    findDuplicates duplicates (x:xs) ys =
-      case Prelude.filter (== x) ys of
-        [] -> findDuplicates duplicates xs ys
-        [_] -> findDuplicates duplicates xs ys
-        _ -> findDuplicates (x:duplicates) xs ys
     collectEnterContextNames :: [Text] -> [Step] -> [Text]
     collectEnterContextNames names [] = names
     collectEnterContextNames names (step:steps) =
       case step of
         EnterContext name _ -> collectEnterContextNames (name:names) steps
         _ -> collectEnterContextNames names steps
+    findConflictingContexts :: Eq a => [a] -> [a] -> [a] -> [a]
+    findConflictingContexts duplicates [] _ = duplicates
+    findConflictingContexts duplicates (x:xs) ys =
+      case Prelude.filter (== x) ys of
+        [] -> findConflictingContexts duplicates xs ys
+        [_] -> findConflictingContexts duplicates xs ys
+        _ -> findConflictingContexts (x:duplicates) xs ys
     verifyLeaveContextSteps :: [Text] -> [Step] -> IO ()
     verifyLeaveContextSteps [] [] = return ()
     verifyLeaveContextSteps (name:_) [] =
