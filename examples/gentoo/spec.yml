@@ -32,32 +32,27 @@ steps:
   - --xattrs-include='*.*'
   - --numeric-owner
 
-- name: rootfs_directory
-  enter:
-    directory: build/rootfs
-
+# Set up mounts for chroot
 - name: chroot_mounts
   enter:
     onEnter:
-    - ["mount", "-t", "proc", "/proc", "./proc"]
-    - ["mount", "--rbind", "/dev", "./dev"]
-    - ["mount", "--make-rslave", "./dev"]
-    - ["mount", "--rbind", "/sys", "./sys"]
-    - ["mount", "--make-rslave", "./sys"]
-    - ["mount", "--bind", "/run", "./run"]
-    - ["mount", "--make-slave", "./run"]
+    - ["mount", "-t", "proc", "/proc", "rootfs/proc"]
+    - ["mount", "--rbind", "/dev", "rootfs/dev"]
+    - ["mount", "--make-rslave", "rootfs/dev"]
+    - ["mount", "--rbind", "/sys", "rootfs/sys"]
+    - ["mount", "--make-rslave", "rootfs/sys"]
+    - ["mount", "--bind", "/run", "rootfs/run"]
+    - ["mount", "--make-slave", "rootfs/run"]
     onLeave:
-    - ["umount", "-R", "./proc"]
-    - ["umount", "-R", "./dev/pts"]
-    - ["umount", "-R", "./dev/shm"]
-    - ["umount", "-R", "./dev"]
-    - ["umount", "-R", "./sys"]
-    - ["umount", "-R", "./run"]
-
+    - ["umount", "-R", "rootfs/proc"]
+    - ["umount", "-R", "rootfs/dev/pts"]
+    - ["umount", "-R", "rootfs/dev/shm"]
+    - ["umount", "-R", "rootfs/dev"]
+    - ["umount", "-R", "rootfs/sys"]
+    - ["umount", "-R", "rootfs/run"]
 - name: chroot
   enter:
     chroot: build/rootfs
-
 - file: /etc/locale.gen
   content: |
     en_CA.UTF-8 UTF-8
@@ -66,7 +61,6 @@ steps:
 - commands: ["locale-gen"]
 - leave: chroot
 - leave: chroot_mounts
-- leave: rootfs_directory
 - commands: ["tar", "-C", "rootfs", "-caf", "yakd-gentoo-x86_64.tar.xz", "."]
 - leave: mount_rootfs
 - leave: build_directory
