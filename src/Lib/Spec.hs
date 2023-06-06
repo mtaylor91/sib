@@ -67,10 +67,11 @@ loadSpec :: FilePath -> IO Spec
 loadSpec path = do
   specYaml <- BS.readFile path
   spec <- Y.decodeThrow specYaml
-  let contextNames = getContextNames [] $ steps spec
-  case findDuplicates [] contextNames contextNames of
-    [] -> verifyLeaves contextNames spec
+  let enterContextNames = collectEnterContextNames [] $ steps spec
+  verifyLeaveContextSteps enterContextNames $ steps spec
+  case findDuplicates [] enterContextNames enterContextNames of
     duplicate:_ -> fail $ "Duplicate context(s): " ++ show duplicate
+    [] -> pure spec
   where
     findDuplicates :: Eq a => [a] -> [a] -> [a] -> [a]
     findDuplicates duplicates [] _ = duplicates
@@ -79,28 +80,27 @@ loadSpec path = do
         [] -> findDuplicates duplicates xs ys
         [_] -> findDuplicates duplicates xs ys
         _ -> findDuplicates (x:duplicates) xs ys
-    getContextNames :: [Text] -> [Step] -> [Text]
-    getContextNames names [] = names
-    getContextNames names (step:steps) =
+    collectEnterContextNames :: [Text] -> [Step] -> [Text]
+    collectEnterContextNames names [] = names
+    collectEnterContextNames names (step:steps) =
       case step of
-        EnterContext name _ -> getContextNames (name:names) steps
-        _ -> getContextNames names steps
-    verifyLeaves :: [Text] -> Spec -> IO Spec
-    verifyLeaves contextNames spec =
-      case verifyLeaves' contextNames $ steps spec of
-        [] -> return spec
-        leaves -> fail $ "Leaves without matching enter: " ++ show leaves
-    verifyLeaves' :: [Text] -> [Step] -> [Text]
-    verifyLeaves' _ [] = []
-    verifyLeaves' contextNames (step:steps) =
+        EnterContext name _ -> collectEnterContextNames (name:names) steps
+        _ -> collectEnterContextNames names steps
+    verifyLeaveContextSteps :: [Text] -> [Step] -> IO ()
+    verifyLeaveContextSteps [] [] = return ()
+    verifyLeaveContextSteps (name:_) [] =
+      fail $ "Context " ++ show name ++ " was never left"
+    verifyLeaveContextSteps [] (step:steps) =
       case step of
         LeaveContext name ->
-          case contextNames of
-            contextName:contextNames' ->
-              if name == contextName
-                then verifyLeaves' contextNames' steps
-                else fail $
-                  "Cannot leave context " ++ show name ++
-                  " from context " ++ show contextName
-            [] -> fail $ "Leave without matching enter: " ++ show name
-        _ -> verifyLeaves' contextNames steps
+          fail $ "Leave without matching enter: " ++ show name
+        _ -> verifyLeaveContextSteps [] steps
+    verifyLeaveContextSteps (name:names) (step:steps) =
+      case step of
+        LeaveContext name' ->
+          if name == name'
+            then verifyLeaveContextSteps names steps
+            else fail $
+              "Cannot leave context " ++ show name' ++
+              " from context " ++ show name
+        _ -> verifyLeaveContextSteps (name:names) steps
