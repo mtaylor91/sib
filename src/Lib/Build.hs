@@ -75,7 +75,8 @@ leaveContext state n =
     (_, Nothing) ->
       error "leaveContext: context stack mismatch (empty)"
     (_, Just (n', _)) ->
-      error $ "leaveContext: context stack mismatch (" ++ T.unpack n' ++ " != " ++ T.unpack n ++ ")"
+      error $ "leaveContext: context stack mismatch (" ++
+        T.unpack n' ++ " != " ++ T.unpack n ++ ")"
   where
     leaveContext' :: State -> Context -> IO State
     leaveContext' state (Chroot dir) = do
