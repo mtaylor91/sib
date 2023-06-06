@@ -86,7 +86,7 @@ leaveContext state n =
       pure state
     leaveContext' state (BracketCommands _ leaveCommands) = do
       putStrLn $ "Leaving " ++ T.unpack n
-      executeCommands state leaveCommands
+      catchFail state $ executeCommands state leaveCommands
 
 
 leaveRemainingContexts :: State -> IO State
