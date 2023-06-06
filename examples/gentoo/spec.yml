@@ -56,7 +56,7 @@ steps:
 
 - name: chroot
   enter:
-    chroot: .
+    chroot: build/rootfs
 
 - file: /etc/locale.gen
   content: |

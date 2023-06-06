@@ -5,10 +5,9 @@ module Lib.Command
   , Lib.Command.runCommands
   ) where
 
-import Control.Concurrent (forkIO, killThread)
+import Control.Concurrent (forkIO)
 import Control.Monad
 import qualified Data.Text as T
-import System.Directory (getCurrentDirectory)
 import System.IO (Handle, hGetLine, hIsEOF)
 import System.Process
 import System.Exit
@@ -25,30 +24,31 @@ executeCommand state command =
     executeCommandWithChroot =
       case chrootDirectory state of
         Just chroot -> do
-          dir <- getCurrentDirectory
           let cmdline = "chroot" : T.pack chroot : command
           putStrLn $ "  Executing: " ++ show cmdline
-          putStrLn $ "  In directory: " ++ show dir
-          executeCommandProcess cmdline
+          executeCommandProcess Nothing cmdline
         Nothing -> do
-          dir <- getCurrentDirectory
-          putStrLn $ "  Executing: " ++ show command
-          putStrLn $ "  In directory: " ++ show dir
-          executeCommandProcess command
-    executeCommandProcess :: [T.Text] -> IO State
-    executeCommandProcess [] = pure state
-    executeCommandProcess (cmd:args) = do
+          case contextDirectory state of
+            Just dir -> do
+              putStrLn $ "  Executing: " ++ show command
+              executeCommandProcess (Just dir) command
+            Nothing -> do
+              putStrLn $ "  Executing: " ++ show command
+              executeCommandProcess Nothing command
+    executeCommandProcess :: Maybe FilePath -> [T.Text] -> IO State
+    executeCommandProcess _ [] = pure state
+    executeCommandProcess maybeDir (cmd:args) = do
       (readFD, writeFD) <- createPipe
       let process = (proc (T.unpack cmd) (map T.unpack args))
-            { delegate_ctlc = True
+            { cwd = maybeDir
+            , delegate_ctlc = True
             , std_in = NoStream
             , std_out = UseHandle writeFD
             , std_err = UseHandle writeFD
             }
       (_, _, _, ph) <- createProcess process
-      outputThreadId <- forkIO $ writeCommandOutput readFD
+      _ <- forkIO $ writeCommandOutput readFD
       exitCode <- waitForProcess ph
-      killThread outputThreadId
       case exitCode of
         ExitSuccess -> pure state
         ExitFailure code -> do

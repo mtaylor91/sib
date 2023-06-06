@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Lib.File
   ( Lib.File.writeFile
+  , resolveFile
   ) where
 
 
@@ -10,9 +11,9 @@ import qualified Data.Text as T
 import Lib.State
 
 
-resolveFile :: State -> T.Text -> FilePath
+resolveFile :: State -> String -> FilePath
 resolveFile state path =
-  case T.unpack path of
+  case path of
     '/':rootRelative -> resolveRoot state rootRelative
     relativePath -> resolveRelative state relativePath
 
@@ -26,14 +27,14 @@ resolveRoot state path =
 
 resolveRelative :: State -> FilePath -> FilePath
 resolveRelative state path =
-  case directoryStack state of
-    [] -> path
-    (dir:_) -> dir ++ "/" ++ path
+  case contextDirectory state of
+    Nothing -> path
+    Just dir -> dir ++ "/" ++ path
 
 
 writeFile :: State -> T.Text -> T.Text -> IO State
 writeFile state file content = if failed state then pure state else do
-  let realFile = resolveFile state file
+  let realFile = resolveFile state $ T.unpack file
   putStrLn $ "Writing file: " ++ realFile
   putStrLn $ "  " ++ T.unpack indentedContent
   catch (doWriteFile realFile) $ \e -> do

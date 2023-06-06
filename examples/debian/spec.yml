@@ -35,7 +35,7 @@ steps:
     - ["umount", "-R", "./run"]
 - name: chroot
   enter:
-    chroot: .
+    chroot: rootfs
 - commands: ["apt-get", "update"]
 - file: /etc/locale.gen
   content: |

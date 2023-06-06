@@ -5,11 +5,10 @@ module Lib.Build
   ) where
 
 import Control.Concurrent (myThreadId, throwTo)
-import Control.Exception (catch, throw)
-import Control.Monad (unless, when)
+import Control.Exception (throw)
+import Control.Monad (when)
 import qualified Data.Text as T
-import System.Directory (createDirectory, getCurrentDirectory, withCurrentDirectory)
-import System.IO.Error (isDoesNotExistError)
+import System.Directory (getCurrentDirectory)
 import System.Posix.Signals
 
 import Lib.Command
@@ -29,9 +28,7 @@ buildImage spec = do
   cwd <- getCurrentDirectory
   state <- runSteps (steps spec) $ State
     { contextStack = []
-    , directoryStack = []
     , startingDirectory = cwd
-    , chrootDirectory = Nothing
     , failed = False
     }
   when (failed state) $ throw BuildFailed
@@ -40,10 +37,10 @@ buildImage spec = do
 enterContext :: State -> T.Text -> Context -> IO State
 enterContext state name ctx@(Chroot dir) = do
   putStrLn $ "Entering chroot " ++ T.unpack dir
-  pure $ pushContext (state { chrootDirectory = Just $ T.unpack dir }) name ctx
+  pure $ pushContext state name ctx
 enterContext state name ctx@(Directory dir) = do
   putStrLn $ "Entering directory " ++ T.unpack dir
-  pure $ pushContext (pushDirectory state $ T.unpack dir) name ctx
+  pure $ pushContext state name ctx
 enterContext state name ctx@(BracketCommands enterCommands _) = do
   putStrLn $ "Entering " ++ T.unpack name
   state' <- executeCommands state enterCommands
@@ -63,12 +60,10 @@ leaveContext state n =
     leaveContext' :: State -> Context -> IO State
     leaveContext' state (Chroot dir) = do
       putStrLn $ "Leaving chroot " ++ T.unpack dir
-      pure $ state { chrootDirectory = contextChrootDirectory state }
+      pure state
     leaveContext' state (Directory dir) = do
       putStrLn $ "Leaving directory " ++ T.unpack dir
-      case popDirectory state of
-        (state', Just _) -> pure state'
-        (_, Nothing) -> error "leaveContext: directory stack mismatch (empty)"
+      pure state
     leaveContext' state (BracketCommands _ leaveCommands) = do
       putStrLn $ "Leaving " ++ T.unpack n
       executeCommands state leaveCommands
@@ -96,18 +91,8 @@ runSteps (step:steps) state =
   where
     doRunStep :: IO State
     doRunStep = do
-      state' <- catchFail state $ doRunStepWithDirectoryStack $ directoryStack state
+      state' <- catchFail state $ runStep state step
       runSteps steps state'
-    doRunStepWithDirectoryStack :: [FilePath] -> IO State
-    doRunStepWithDirectoryStack [] = runStep state step
-    doRunStepWithDirectoryStack (dir:_) = catch
-      (withCurrentDirectory dir $ runStep state step)
-      (doRunRetryCreateDirectory dir)
-    doRunRetryCreateDirectory :: FilePath -> IOError -> IO State
-    doRunRetryCreateDirectory dir e = do
-      unless (isDoesNotExistError e) $ ioError e
-      createDirectory dir
-      withCurrentDirectory dir $ runStep state step
     skipRunStep :: IO State
     skipRunStep = do
       runSteps steps state

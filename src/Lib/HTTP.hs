@@ -14,41 +14,44 @@ import Network.HTTP.Client
 import Network.HTTP.Client.TLS
 import Network.HTTP.Types.Header
 import Network.HTTP.Types.Status (statusCode)
-import System.Directory (doesFileExist)
+import System.Directory (doesFileExist, removeFile)
 
 import Lib.Error
+import Lib.File (resolveFile)
 import Lib.State
 
 
 -- Download a file from a URL.
 downloadFile :: State -> FilePath -> String -> String -> IO State
 downloadFile state destination sha512sum url = do
-  exists <- doesFileExist destination
+  let filename = resolveFile state destination
+  exists <- doesFileExist filename
   if exists
-    then doCheckFile
-    else doDownloadFile
+    then doCheckFile filename
+    else doDownloadFile filename
   where
-    doCheckFile :: IO State
-    doCheckFile = do
-      sha512sum' <- sha512File destination
+    doCheckFile :: FilePath -> IO State
+    doCheckFile filename = do
+      sha512sum' <- sha512File filename
       if sha512sum == sha512sum'
         then do
           putStrLn $
-            "File " ++ destination ++ " already exists and has correct SHA512 checksum"
+            "File " ++ filename ++ " already exists and has correct SHA512 checksum"
           pure state
         else do
           putStrLn $
-            "File " ++ destination ++ " already exists but has incorrect SHA512 checksum"
-          doDownloadFile
-    doDownloadFile :: IO State
-    doDownloadFile = do
-      putStrLn $ "Downloading file " ++ destination
+            "File " ++ filename ++ " already exists but has incorrect SHA512 checksum"
+          removeFile filename
+          doDownloadFile filename
+    doDownloadFile :: FilePath -> IO State
+    doDownloadFile filename = do
+      putStrLn $ "Downloading file " ++ filename
       putStrLn $ "  " ++ url
       manager <- newManager tlsManagerSettings
       request <- parseRequest url
-      withResponse request manager handleResponse
-    handleResponse :: Response BodyReader -> IO State
-    handleResponse response = do
+      withResponse request manager $ handleResponse filename
+    handleResponse :: FilePath -> Response BodyReader -> IO State
+    handleResponse filename response = do
       let headers = responseHeaders response
           body = responseBody response
           status = responseStatus response
@@ -56,7 +59,7 @@ downloadFile state destination sha512sum url = do
           maybeContentLength = maybeContentLengthHeader >>= BS8.readInt
       case (statusCode status, maybeContentLength) of
         (codeOK, Just (contentLength, _)) | codeOK >= 200 && codeOK < 300 -> do
-          writeToFile state destination sha512sum 0 contentLength body
+          writeToFile state filename sha512sum 0 contentLength body
         (_, Nothing) -> do
           throw $ BuildDownloadError "No Content-Length header"
         (codeErr, _) -> do
@@ -72,15 +75,15 @@ sha512File filename = do
 
 -- Write an HTTP response to disk
 writeToFile :: State -> FilePath -> String -> Int -> Int -> BodyReader -> IO State
-writeToFile state destination sha512sum downloaded total body = do
+writeToFile state filename sha512sum downloaded total body = do
   bs <- brRead body
   case (BS.null bs, downloaded) of
     (False, _) -> do
-      BS.appendFile destination bs
+      BS.appendFile filename bs
       let downloaded' = downloaded + BS.length bs
-      writeToFile state destination sha512sum downloaded' total body
+      writeToFile state filename sha512sum downloaded' total body
     (True, dl) | dl == total -> do
-      sha512sum' <- sha512File destination
+      sha512sum' <- sha512File filename
       if sha512sum == sha512sum'
         then pure state
         else throw $ BuildDownloadError "Incorrect SHA512 checksum"
