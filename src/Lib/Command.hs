@@ -2,7 +2,6 @@
 module Lib.Command
   ( Lib.Command.executeCommand
   , Lib.Command.executeCommands
-  , Lib.Command.runCommand
   , Lib.Command.runCommands
   ) where
 
@@ -14,6 +13,7 @@ import System.IO (Handle, hGetLine, hIsEOF)
 import System.Process
 import System.Exit
 
+import Lib.Spec (CommandOrCommands(..))
 import Lib.State
 
 
@@ -63,17 +63,12 @@ executeCommand state command =
         writeCommandOutput handle
 
 
-executeCommands :: State -> [[T.Text]] -> IO State
-executeCommands = foldM executeCommand
+executeCommands :: State -> CommandOrCommands -> IO State
+executeCommands state (Command cmd) = executeCommand state cmd
+executeCommands state (Commands cmds) = foldM executeCommand state cmds
 
 
-runCommand :: State -> [T.Text] -> IO State
-runCommand state command = do
-  putStrLn "Running command:"
-  executeCommand state command
-
-
-runCommands :: State -> [[T.Text]] -> IO State
+runCommands :: State -> CommandOrCommands -> IO State
 runCommands state commands = do
   putStrLn "Running commands:"
   executeCommands state commands

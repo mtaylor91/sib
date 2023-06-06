@@ -30,13 +30,11 @@ library
       Lib
       Lib.Build
       Lib.Command
-      Lib.Context
       Lib.Error
       Lib.File
       Lib.HTTP
       Lib.Spec
       Lib.State
-      Lib.Steps
   other-modules:
       Paths_sib
   hs-source-dirs:

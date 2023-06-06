@@ -1,56 +1,29 @@
 name: yakd-gentoo
-
-contexts:
-
-# wrapper context creates the build rootfs directory on enter and cleans it up on leave
-- name: wrapper
-  enter:
-  - ["mkdir", "-p", "build/rootfs"]
-  leave:
-  - ["rmdir", "build/rootfs"]
-
-# build directory context
-- directory: build
-
-# mount context mounts the tmpfs for speedier building and easy clean-up
-- name: mount_rootfs
-  enter:
-  - ["mount", "-t", "tmpfs", "tmpfs", "rootfs"]
-  leave:
-  - ["umount", "rootfs"]
-
-# rootfs directory context
-- directory: build/rootfs
-
-# chroot metadata filesystem mount context
-- name: chroot_mounts
-  enter:
-  - ["mount", "-t", "proc", "/proc", "./proc"]
-  - ["mount", "--rbind", "/dev", "./dev"]
-  - ["mount", "--make-rslave", "./dev"]
-  - ["mount", "--rbind", "/sys", "./sys"]
-  - ["mount", "--make-rslave", "./sys"]
-  - ["mount", "--bind", "/run", "./run"]
-  - ["mount", "--make-slave", "./run"]
-  leave:
-  - ["umount", "-R", "./proc"]
-  - ["umount", "-R", "./dev/pts"]
-  - ["umount", "-R", "./dev/shm"]
-  - ["umount", "-R", "./dev"]
-  - ["umount", "-R", "./sys"]
-  - ["umount", "-R", "./run"]
-
-# build rootfs chroot context
-- chroot: .
-
 steps:
-- enter: wrapper
-- enter: build
+
+- name: build_wrapper
+  enter:
+    onEnter:
+    - ["mkdir", "-p", "build/rootfs"]
+    onLeave:
+    - ["rmdir", "build/rootfs"]
+
+- name: build_directory
+  enter:
+    directory: build
+
 - file: gentoo-stage3-amd64-systemd-mergedusr.tar.xz
   sha512: 9338f0611fd47052e4df5cbb9dcf30500ab8bde3c33be095d7ee717d5ec35ca14a798083295d2d9042b1b15a55efb0a6b742f25f4435be7dca0bce144c7c0758
   url: https://bouncer.gentoo.org/fetch/root/all/releases/amd64/autobuilds/20230604T170201Z/stage3-amd64-systemd-mergedusr-20230604T170201Z.tar.xz
-- enter: mount_rootfs
-- command:
+
+- name: mount_rootfs
+  enter:
+    onEnter:
+    - ["mount", "-t", "tmpfs", "tmpfs", "rootfs"]
+    onLeave:
+    - ["umount", "rootfs"]
+
+- commands:
   - tar
   - -xpf
   - gentoo-stage3-amd64-systemd-mergedusr.tar.xz
@@ -58,18 +31,43 @@ steps:
   - rootfs
   - --xattrs-include='*.*'
   - --numeric-owner
-- enter: build/rootfs
-- enter: chroot_mounts
-- enter: chroot
+
+- name: rootfs_directory
+  enter:
+    directory: build/rootfs
+
+- name: chroot_mounts
+  enter:
+    onEnter:
+    - ["mount", "-t", "proc", "/proc", "./proc"]
+    - ["mount", "--rbind", "/dev", "./dev"]
+    - ["mount", "--make-rslave", "./dev"]
+    - ["mount", "--rbind", "/sys", "./sys"]
+    - ["mount", "--make-rslave", "./sys"]
+    - ["mount", "--bind", "/run", "./run"]
+    - ["mount", "--make-slave", "./run"]
+    onLeave:
+    - ["umount", "-R", "./proc"]
+    - ["umount", "-R", "./dev/pts"]
+    - ["umount", "-R", "./dev/shm"]
+    - ["umount", "-R", "./dev"]
+    - ["umount", "-R", "./sys"]
+    - ["umount", "-R", "./run"]
+
+- name: chroot
+  enter:
+    chroot: .
+
 - file: /etc/locale.gen
   content: |
     en_CA.UTF-8 UTF-8
     en_US.UTF-8 UTF-8
-- command: ["locale-gen"]
+
+- commands: ["locale-gen"]
 - leave: chroot
 - leave: chroot_mounts
-- leave: build/rootfs
-- command: ["tar", "-C", "rootfs", "-caf", "yakd-gentoo-x86_64.tar.xz", "."]
+- leave: rootfs_directory
+- commands: ["tar", "-C", "rootfs", "-caf", "yakd-gentoo-x86_64.tar.xz", "."]
 - leave: mount_rootfs
-- leave: build
-- leave: wrapper
+- leave: build_directory
+- leave: build_wrapper

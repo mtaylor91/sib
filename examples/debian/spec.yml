@@ -1,41 +1,42 @@
 name: yakd-debian
-contexts:
+steps:
 - name: build
   enter:
-  - ["mkdir", "-p", "rootfs"]
-  leave:
-  - ["rm", "-rf", "rootfs/"]
+    onEnter:
+    - ["mkdir", "-p", "rootfs"]
+    onLeave:
+    - ["rm", "-rf", "rootfs/"]
 - name: tmpfs
   enter:
-  - ["mount", "-t", "tmpfs", "tmpfs", "rootfs"]
-  leave:
-  - ["umount", "rootfs"]
-- directory: rootfs
+    onEnter:
+    - ["mount", "-t", "tmpfs", "tmpfs", "rootfs"]
+    onLeave:
+    - ["umount", "rootfs"]
+- commands: ["debootstrap", "bullseye", "rootfs"]
+- name: rootfs
+  enter:
+    directory: rootfs
 - name: metadata_mounts
   enter:
-  - ["mount", "-t", "proc", "/proc", "./proc"]
-  - ["mount", "--rbind", "/dev", "./dev"]
-  - ["mount", "--make-rslave", "./dev"]
-  - ["mount", "--rbind", "/sys", "./sys"]
-  - ["mount", "--make-rslave", "./sys"]
-  - ["mount", "--bind", "/run", "./run"]
-  - ["mount", "--make-slave", "./run"]
-  leave:
-  - ["umount", "-R", "./proc"]
-  - ["umount", "-R", "./dev/pts"]
-  - ["umount", "-R", "./dev/shm"]
-  - ["umount", "-R", "./dev"]
-  - ["umount", "-R", "./sys"]
-  - ["umount", "-R", "./run"]
-- chroot: .
-steps:
-- enter: build
-- enter: tmpfs
-- command: ["debootstrap", "bullseye", "rootfs"]
-- enter: rootfs
-- enter: metadata_mounts
-- enter: chroot
-- command: ["apt-get", "update"]
+    onEnter:
+    - ["mount", "-t", "proc", "/proc", "./proc"]
+    - ["mount", "--rbind", "/dev", "./dev"]
+    - ["mount", "--make-rslave", "./dev"]
+    - ["mount", "--rbind", "/sys", "./sys"]
+    - ["mount", "--make-rslave", "./sys"]
+    - ["mount", "--bind", "/run", "./run"]
+    - ["mount", "--make-slave", "./run"]
+    onLeave:
+    - ["umount", "-R", "./proc"]
+    - ["umount", "-R", "./dev/pts"]
+    - ["umount", "-R", "./dev/shm"]
+    - ["umount", "-R", "./dev"]
+    - ["umount", "-R", "./sys"]
+    - ["umount", "-R", "./run"]
+- name: chroot
+  enter:
+    chroot: .
+- commands: ["apt-get", "update"]
 - file: /etc/locale.gen
   content: |
     en_CA.UTF-8 UTF-8
@@ -47,6 +48,6 @@ steps:
 - leave: chroot
 - leave: metadata_mounts
 - leave: rootfs
-- command: ["tar", "-C", "rootfs", "-caf", "yakd-debian-x86_64.tar.xz", "."]
+- commands: ["tar", "-C", "rootfs", "-caf", "yakd-debian-x86_64.tar.xz", "."]
 - leave: tmpfs
 - leave: build

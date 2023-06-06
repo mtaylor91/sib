@@ -12,14 +12,12 @@ import System.Directory (createDirectory, getCurrentDirectory, withCurrentDirect
 import System.IO.Error (isDoesNotExistError)
 import System.Posix.Signals
 
-import Lib.Context
 import Lib.Command
 import Lib.Error
 import Lib.File (writeFile)
 import Lib.HTTP (downloadFile)
-import Lib.Spec (Spec)
+import Lib.Spec
 import Lib.State
-import Lib.Steps (fromSpec, Step(..), Steps(..))
 
 
 buildImage :: Spec -> IO ()
@@ -29,58 +27,67 @@ buildImage spec = do
       exitSignalSet = addSignal sigQUIT $ addSignal sigTERM emptySignalSet
   _ <- installHandler sigINT (Catch handleInterrupt) $ Just exitSignalSet
   cwd <- getCurrentDirectory
-  state <- fromSpec spec >>=
-    ( runSteps $ State
-      { contextStack = []
-      , directoryStack = []
-      , startingDirectory = cwd
-      , chrootDirectory = Nothing
-      , failed = False
-      }
-    )
+  state <- runSteps (steps spec) $ State
+    { contextStack = []
+    , directoryStack = []
+    , startingDirectory = cwd
+    , chrootDirectory = Nothing
+    , failed = False
+    }
   when (failed state) $ throw BuildFailed
 
 
-enterContext :: State -> Context -> IO State
-enterContext state ctx@(Chroot dir) = if failed state then pure state else do
+enterContext :: State -> T.Text -> Context -> IO State
+enterContext state name ctx@(Chroot dir) = do
   putStrLn $ "Entering chroot " ++ T.unpack dir
-  pure $ pushContext (state { chrootDirectory = Just $ T.unpack dir }) ctx
-enterContext state ctx@(Directory dir) = do
+  pure $ pushContext (state { chrootDirectory = Just $ T.unpack dir }) name ctx
+enterContext state name ctx@(Directory dir) = do
   putStrLn $ "Entering directory " ++ T.unpack dir
-  pure $ pushContext (pushDirectory state $ T.unpack dir) ctx
-enterContext state ctx@(BracketCommands n enterCommands _) = do
-  putStrLn $ "Entering " ++ T.unpack n
+  pure $ pushContext (pushDirectory state $ T.unpack dir) name ctx
+enterContext state name ctx@(BracketCommands enterCommands _) = do
+  putStrLn $ "Entering " ++ T.unpack name
   state' <- executeCommands state enterCommands
-  pure $ pushContext state' ctx
+  pure $ pushContext state' name ctx
 
 
-leaveContext :: State -> Context -> IO State
-leaveContext state ctx@(Chroot dir) = do
-  putStrLn $ "Leaving chroot " ++ T.unpack dir
-  pure $ removeContext (state { chrootDirectory = Nothing }) ctx
-leaveContext state ctx@(Directory dir) = do
-  putStrLn $ "Leaving directory " ++ T.unpack dir
-  pure $ removeContext (removeDirectory state $ T.unpack dir) ctx
-leaveContext state ctx@(BracketCommands n _ leaveCommands) = do
-  putStrLn $ "Leaving " ++ T.unpack n
-  state' <- executeCommands state leaveCommands
-  pure $ removeContext state' ctx
+leaveContext :: State -> T.Text -> IO State
+leaveContext state n =
+  case popContext state of
+    (state', Just (n', ctx)) | n == n' ->
+      leaveContext' state' ctx
+    (_, Nothing) ->
+      error "leaveContext: context stack mismatch (empty)"
+    (_, Just (n', _)) ->
+      error $ "leaveContext: context stack mismatch (" ++ T.unpack n' ++ " != " ++ T.unpack n ++ ")"
+  where
+    leaveContext' :: State -> Context -> IO State
+    leaveContext' state (Chroot dir) = do
+      putStrLn $ "Leaving chroot " ++ T.unpack dir
+      pure $ state { chrootDirectory = contextChrootDirectory state }
+    leaveContext' state (Directory dir) = do
+      putStrLn $ "Leaving directory " ++ T.unpack dir
+      case popDirectory state of
+        (state', Just _) -> pure state'
+        (_, Nothing) -> error "leaveContext: directory stack mismatch (empty)"
+    leaveContext' state (BracketCommands _ leaveCommands) = do
+      putStrLn $ "Leaving " ++ T.unpack n
+      executeCommands state leaveCommands
 
 
 leaveRemainingContexts :: State -> IO State
 leaveRemainingContexts state =
   case contextStack state of
     [] -> pure state
-    (context:_) -> do
+    ((name, _):_) -> do
       putStrLn ""
-      state' <- leaveContext state context
+      state' <- leaveContext state name
       leaveRemainingContexts state'
 
 
-runSteps :: State -> Steps -> IO State
-runSteps state (Steps []) =
+runSteps :: [Step] -> State -> IO State
+runSteps [] state =
   leaveRemainingContexts state
-runSteps state (Steps (step:steps)) =
+runSteps (step:steps) state =
   if failed state
     then case step of
       LeaveContext _ -> doRunStep
@@ -90,7 +97,7 @@ runSteps state (Steps (step:steps)) =
     doRunStep :: IO State
     doRunStep = do
       state' <- catchFail state $ doRunStepWithDirectoryStack $ directoryStack state
-      runSteps state' $ Steps steps
+      runSteps steps state'
     doRunStepWithDirectoryStack :: [FilePath] -> IO State
     doRunStepWithDirectoryStack [] = runStep state step
     doRunStepWithDirectoryStack (dir:_) = catch
@@ -103,7 +110,7 @@ runSteps state (Steps (step:steps)) =
       withCurrentDirectory dir $ runStep state step
     skipRunStep :: IO State
     skipRunStep = do
-      runSteps state $ Steps steps
+      runSteps steps state
 
 
 runStep :: State -> Step -> IO State
@@ -111,15 +118,13 @@ runStep state step = putStrLn "" >> runStepDispatch state step
 
 
 runStepDispatch :: State -> Step -> IO State
-runStepDispatch state (RunCommand cmd) =
-  runCommand state cmd
+runStepDispatch state (DownloadFile file sha512 url) =
+  downloadFile state (T.unpack file) (T.unpack sha512) (T.unpack url)
+runStepDispatch state (EnterContext name ctx) =
+  enterContext state name ctx
+runStepDispatch state (LeaveContext name) = do
+  leaveContext state name
 runStepDispatch state (RunCommands commands) =
   runCommands state commands
 runStepDispatch state (WriteFile file content) =
   Lib.File.writeFile state file content
-runStepDispatch state (DownloadFile file sha512 url) =
-  downloadFile state (T.unpack file) (T.unpack sha512) (T.unpack url)
-runStepDispatch state (EnterContext ctx) =
-  enterContext state ctx
-runStepDispatch state (LeaveContext ctx) =
-  leaveContext state ctx
