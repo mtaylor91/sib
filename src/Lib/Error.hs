@@ -13,6 +13,7 @@ import Lib.State
 
 data BuildException
   = BuildFailed
+  | BuildCommandFailed String
   | BuildDownloadError String
   | BuildInterrupted
   | BuildIOException IOException

@@ -8,12 +8,14 @@ module Lib.Command
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
+import Control.Exception (throw)
 import Control.Monad
 import qualified Data.Text as T
 import System.IO (Handle, hClose, hGetLine, hIsEOF)
 import System.Process
 import System.Exit
 
+import Lib.Error (BuildException(..))
 import Lib.Spec (CommandOrCommands(..), CommandOrCommandsStep(..))
 import Lib.State
 
@@ -58,8 +60,10 @@ executeCommand state command =
       case exitCode of
         ExitSuccess -> pure state
         ExitFailure code -> do
-          putStrLn $ "  Command failed with exit code: " ++ show code
-          pure $ state { failed = True }
+          let cmdString = T.intercalate " " (cmd:args)
+              errString = "Command failed: " ++ T.unpack cmdString ++
+                          " (exit code: " ++ show code ++ ")"
+          throw $ BuildCommandFailed errString
     writeCommandOutput :: Handle -> IO ()
     writeCommandOutput handle = do
       iseof <- hIsEOF handle
