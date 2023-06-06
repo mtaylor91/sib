@@ -15,7 +15,7 @@ import System.IO (Handle, hClose, hGetLine, hIsEOF)
 import System.Process
 import System.Exit
 
-import Lib.Error (BuildException(..))
+import Lib.Error (BuildException(..), catchFail)
 import Lib.Spec (CommandOrCommands(..), CommandOrCommandsStep(..))
 import Lib.State
 
@@ -30,15 +30,15 @@ executeCommand state command =
         Just chroot -> do
           let cmdline = "chroot" : T.pack chroot : command
           putStrLn $ "  Executing: " ++ show cmdline
-          executeCommandProcess Nothing cmdline
+          catchFail state $ executeCommandProcess Nothing cmdline
         Nothing -> do
           case contextDirectory state of
             Just dir -> do
               putStrLn $ "  Executing: " ++ show command
-              executeCommandProcess (Just dir) command
+              catchFail state $ executeCommandProcess (Just dir) command
             Nothing -> do
               putStrLn $ "  Executing: " ++ show command
-              executeCommandProcess Nothing command
+              catchFail state $ executeCommandProcess Nothing command
     executeCommandProcess :: Maybe FilePath -> [T.Text] -> IO State
     executeCommandProcess _ [] = pure state
     executeCommandProcess maybeDir (cmd:args) = do
@@ -46,7 +46,6 @@ executeCommand state command =
       (readOut, writeOut) <- createPipe
       let process = (proc (T.unpack cmd) (map T.unpack args))
             { cwd = maybeDir
-            , delegate_ctlc = True
             , std_in = UseHandle readIn
             , std_out = UseHandle writeOut
             , std_err = UseHandle writeOut

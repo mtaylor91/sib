@@ -24,7 +24,9 @@ buildImage :: Spec -> IO ()
 buildImage spec = do
   buildThreadId <- myThreadId
   let handleInterrupt = throwTo buildThreadId BuildInterrupted
-      exitSignalSet = addSignal sigQUIT $ addSignal sigTERM emptySignalSet
+      exitSignalSet =
+        addSignal sigABRT $ addSignal sigCHLD $ addSignal sigQUIT $ addSignal sigTERM
+        emptySignalSet
   _ <- installHandler sigINT (Catch handleInterrupt) $ Just exitSignalSet
   cwd <- getCurrentDirectory
   let state = State
@@ -74,9 +76,8 @@ leaveContext state n =
       leaveContext' state' ctx
     (_, Nothing) ->
       error "leaveContext: context stack mismatch (empty)"
-    (_, Just (n', _)) ->
-      error $ "leaveContext: context stack mismatch (" ++
-        T.unpack n' ++ " != " ++ T.unpack n ++ ")"
+    (_, Just (_, _)) ->
+      pure state
   where
     leaveContext' :: State -> Context -> IO State
     leaveContext' state (Chroot dir) = do
@@ -95,7 +96,6 @@ leaveRemainingContexts state =
   case contextStack state of
     [] -> pure state
     ((name, _):_) -> do
-      putStrLn ""
       state' <- leaveContext state name
       leaveRemainingContexts state'
 
@@ -114,12 +114,8 @@ runState state =
   where
     doRunStep :: Step -> [Step] -> IO State
     doRunStep step stepsRemaining' = do
-      state' <- catchFail state $ runStep state step
+      state' <- catchFail state $ dispatchStep state step
       runState $ state' { stepsRemaining = stepsRemaining' }
     skipRunStep :: [Step] -> IO State
     skipRunStep stepsRemaining' =
       runState $ state { stepsRemaining = stepsRemaining' }
-
-
-runStep :: State -> Step -> IO State
-runStep state step = putStrLn "" >> dispatchStep state step
