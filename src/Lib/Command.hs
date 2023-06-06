@@ -10,7 +10,7 @@ import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Monad
 import qualified Data.Text as T
-import System.IO (Handle, hGetLine, hIsEOF)
+import System.IO (Handle, hClose, hGetLine, hIsEOF)
 import System.Process
 import System.Exit
 
@@ -40,17 +40,19 @@ executeCommand state command =
     executeCommandProcess :: Maybe FilePath -> [T.Text] -> IO State
     executeCommandProcess _ [] = pure state
     executeCommandProcess maybeDir (cmd:args) = do
-      (readFD, writeFD) <- createPipe
+      (readIn, writeIn) <- createPipe
+      (readOut, writeOut) <- createPipe
       let process = (proc (T.unpack cmd) (map T.unpack args))
             { cwd = maybeDir
             , delegate_ctlc = True
-            , std_in = NoStream
-            , std_out = UseHandle writeFD
-            , std_err = UseHandle writeFD
+            , std_in = UseHandle readIn
+            , std_out = UseHandle writeOut
+            , std_err = UseHandle writeOut
             }
       outputSync <- newEmptyMVar
       (_, _, _, ph) <- createProcess process
-      _ <- forkIO $ writeCommandOutput readFD >> putMVar outputSync ()
+      hClose writeIn
+      _ <- forkIO $ writeCommandOutput readOut >> putMVar outputSync ()
       exitCode <- waitForProcess ph
       takeMVar outputSync
       case exitCode of
