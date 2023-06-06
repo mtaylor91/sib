@@ -7,6 +7,7 @@
 module Lib.Spec
   ( Context(..)
   , CommandOrCommands(..)
+  , CommandOrCommandsStep(..)
   , Step(..)
   , Spec(..)
   , loadSpec
@@ -32,6 +33,16 @@ data CommandOrCommands
 $(A.deriveJSON A.defaultOptions { sumEncoding = A.UntaggedValue } ''CommandOrCommands)
 
 
+data CommandOrCommandsStep
+  = CommandStep { command :: CommandOrCommands }
+  | CommandsStep { commands :: CommandOrCommands }
+  deriving (Eq, Show, Generic)
+
+
+$(A.deriveJSON A.defaultOptions
+  { sumEncoding = A.UntaggedValue } ''CommandOrCommandsStep)
+
+
 data Context
   = Chroot { chroot :: Text }
   | Directory { directory :: Text }
@@ -46,7 +57,7 @@ data Step
   = DownloadFile { file :: Text, sha512 :: Text, url :: Text }
   | EnterContext { name :: Text, enter :: Context }
   | LeaveContext { leave :: Text }
-  | RunCommands { commands :: CommandOrCommands }
+  | RunCommands CommandOrCommandsStep
   | WriteFile { file :: Text, content :: Text }
   deriving (Show, Generic)
 

@@ -2,16 +2,12 @@ name: yakd-debian
 steps:
 - name: build
   enter:
-    onEnter:
-    - ["mkdir", "-p", "rootfs"]
-    onLeave:
-    - ["rm", "-rf", "rootfs/"]
+    onEnter: ["mkdir", "-p", "rootfs"]
+    onLeave: ["rm", "-rf", "rootfs/"]
 - name: tmpfs
   enter:
-    onEnter:
-    - ["mount", "-t", "tmpfs", "tmpfs", "rootfs"]
-    onLeave:
-    - ["umount", "rootfs"]
+    onEnter: ["mount", "-t", "tmpfs", "tmpfs", "rootfs"]
+    onLeave: ["umount", "rootfs"]
 - commands: ["debootstrap", "bullseye", "rootfs"]
 - name: rootfs
   enter:
@@ -36,7 +32,7 @@ steps:
 - name: chroot
   enter:
     chroot: rootfs
-- commands: ["apt-get", "update"]
+- command: ["apt-get", "update"]
 - file: /etc/locale.gen
   content: |
     en_CA.UTF-8 UTF-8
@@ -48,6 +44,6 @@ steps:
 - leave: chroot
 - leave: metadata_mounts
 - leave: rootfs
-- commands: ["tar", "-C", "rootfs", "-caf", "yakd-debian-x86_64.tar.xz", "."]
+- command: ["tar", "-C", "rootfs", "-caf", "yakd-debian-x86_64.tar.xz", "."]
 - leave: tmpfs
 - leave: build

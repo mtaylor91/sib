@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 module Lib.Command
   ( Lib.Command.executeCommand
   , Lib.Command.executeCommands
@@ -13,7 +14,7 @@ import System.IO (Handle, hGetLine, hIsEOF)
 import System.Process
 import System.Exit
 
-import Lib.Spec (CommandOrCommands(..))
+import Lib.Spec (CommandOrCommands(..), CommandOrCommandsStep(..))
 import Lib.State
 
 
@@ -71,7 +72,9 @@ executeCommands state (Command cmd) = executeCommand state cmd
 executeCommands state (Commands cmds) = foldM executeCommand state cmds
 
 
-runCommands :: State -> CommandOrCommands -> IO State
-runCommands state commands = do
+runCommands :: State -> CommandOrCommandsStep -> IO State
+runCommands state commandOrCommands = do
   putStrLn "Running commands:"
-  executeCommands state commands
+  case commandOrCommands of
+    CommandStep cmd -> executeCommands state cmd
+    CommandsStep commands -> executeCommands state commands
