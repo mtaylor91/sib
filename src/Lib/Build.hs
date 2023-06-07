@@ -9,9 +9,9 @@ import System.Posix.Signals
 
 import Lib.Command
 import Lib.Context as C
+import Lib.Download
 import Lib.Error
 import Lib.File as F
-import Lib.HTTP
 import Lib.Spec as S
 
 

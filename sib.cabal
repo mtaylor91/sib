@@ -31,9 +31,9 @@ library
       Lib.Build
       Lib.Command
       Lib.Context
+      Lib.Download
       Lib.Error
       Lib.File
-      Lib.HTTP
       Lib.Spec
   other-modules:
       Paths_sib

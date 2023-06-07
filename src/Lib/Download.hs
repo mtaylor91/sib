@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Lib.HTTP
+module Lib.Download
   ( downloadFile
   ) where
 
