@@ -1,46 +1,38 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 module Lib.Command
-  ( Lib.Command.executeCommand
-  , Lib.Command.executeCommands
-  , Lib.Command.runCommands
+  ( executeCommand
   ) where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (throw)
-import Control.Monad
 import qualified Data.Text as T
 import System.IO (Handle, hClose, hGetLine, hIsEOF)
 import System.Process
 import System.Exit
 
-import Lib.Error (BuildException(..), catchFail)
-import Lib.Spec (CommandOrCommands(..), CommandOrCommandsStep(..))
-import Lib.State
+import Lib.Context (Stack, chroot, directory, indent)
+import Lib.Error (BuildException(..))
 
 
-executeCommand :: State -> [T.Text] -> IO State
-executeCommand state command =
+executeCommand :: Stack -> [T.Text] -> IO ()
+executeCommand stack command =
   executeCommandWithChroot
   where
-    executeCommandWithChroot :: IO State
+    executeCommandWithChroot :: IO ()
     executeCommandWithChroot =
-      case chrootDirectory state of
-        Just chroot -> do
-          let cmdline = "chroot" : T.pack chroot : command
-          putStrLn $ "  Executing: " ++ show cmdline
-          catchFail state $ executeCommandProcess Nothing cmdline
+      case chroot stack of
+        Just dir -> do
+          let cmdline = "chroot" : dir : command
+          putStrLn $ indent stack <> "Executing: " ++ show cmdline
+          executeCommandProcess Nothing cmdline
         Nothing -> do
-          case contextDirectory state of
-            Just dir -> do
-              putStrLn $ "  Executing: " ++ show command
-              catchFail state $ executeCommandProcess (Just dir) command
-            Nothing -> do
-              putStrLn $ "  Executing: " ++ show command
-              catchFail state $ executeCommandProcess Nothing command
-    executeCommandProcess :: Maybe FilePath -> [T.Text] -> IO State
-    executeCommandProcess _ [] = pure state
+          let dir = directory stack
+          putStrLn $ indent stack <> "Executing: " ++ show command
+          executeCommandProcess (Just $ T.unpack dir) command
+    executeCommandProcess :: Maybe FilePath -> [T.Text] -> IO ()
+    executeCommandProcess _ [] = pure ()
     executeCommandProcess maybeDir (cmd:args) = do
       (readIn, writeIn) <- createPipe
       (readOut, writeOut) <- createPipe
@@ -57,7 +49,7 @@ executeCommand state command =
       exitCode <- waitForProcess ph
       takeMVar outputSync
       case exitCode of
-        ExitSuccess -> pure state
+        ExitSuccess -> pure ()
         ExitFailure code -> do
           let cmdString = T.intercalate " " (cmd:args)
               errString = "Command failed: " ++ T.unpack cmdString ++
@@ -68,18 +60,5 @@ executeCommand state command =
       iseof <- hIsEOF handle
       if iseof then pure () else do
         line <- hGetLine handle
-        putStrLn $ "    " ++ line
+        putStrLn $ indent stack ++ line
         writeCommandOutput handle
-
-
-executeCommands :: State -> CommandOrCommands -> IO State
-executeCommands state (Command cmd) = executeCommand state cmd
-executeCommands state (Commands cmds) = foldM executeCommand state cmds
-
-
-runCommands :: State -> CommandOrCommandsStep -> IO State
-runCommands state commandOrCommands = do
-  putStrLn "Running commands:"
-  case commandOrCommands of
-    CommandStep cmd -> executeCommands state cmd
-    CommandsStep commands -> executeCommands state commands

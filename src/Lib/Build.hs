@@ -1,23 +1,18 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
 module Lib.Build
   ( buildImage
   ) where
 
 import Control.Concurrent (myThreadId, throwTo)
-import Control.Exception (throw)
-import Control.Monad (when)
+import Control.Exception (bracket_)
 import qualified Data.Text as T
-import System.Directory (getCurrentDirectory)
 import System.Posix.Signals
 
 import Lib.Command
+import Lib.Context as C
 import Lib.Error
-import Lib.File (writeFile)
-import Lib.HTTP (downloadFile)
-import Lib.Spec
-import Lib.State
-import Lib.Validate
+import Lib.File as F
+import Lib.HTTP
+import Lib.Spec as S
 
 
 buildImage :: Spec -> IO ()
@@ -28,94 +23,58 @@ buildImage spec = do
         addSignal sigABRT $ addSignal sigCHLD $ addSignal sigQUIT $ addSignal sigTERM
         emptySignalSet
   _ <- installHandler sigINT (Catch handleInterrupt) $ Just exitSignalSet
-  cwd <- getCurrentDirectory
-  let state = State
-        { spec = spec
-        , contextStack = []
-        , startingDirectory = cwd
-        , stepsRemaining = steps spec
-        , failed = False
-        }
-  validateState state
-  state' <- runState state
-  when (failed state') $ throw BuildFailed
-  putStrLn ""
-  putStrLn "Build finished."
+  ctx <- fromSteps $ steps spec
+  validate ctx
+  buildWithStack (Stack []) ctx
 
 
-dispatchStep :: State -> Step -> IO State
-dispatchStep state (DownloadFile file sha512 url) =
-  downloadFile state (T.unpack file) (T.unpack sha512) (T.unpack url)
-dispatchStep state (EnterContext name ctx) =
-  enterContext state name ctx
-dispatchStep state (LeaveContext name) = do
-  leaveContext state name
-dispatchStep state (RunCommands commands) =
-  runCommands state commands
-dispatchStep state (WriteFile file content) =
-  Lib.File.writeFile state file content
+buildWithStack :: Stack -> C.Context -> IO ()
+buildWithStack stack ctx@(Context s@(EnterContext _ ctxStep ) c) =
+  let stack' = pushContext stack ctx
+      enterCtx = buildStep stack s
+      leaveCtx = handleLeaveContext stack ctxStep
+   in bracket_ enterCtx leaveCtx $ mapM_ (buildWithStack stack') c
+buildWithStack stack (Context s []) =
+  buildStep stack s
+buildWithStack _ ctx@(Context _ _) =
+  error $ "Unexpected context: " <> show ctx
 
 
-enterContext :: State -> T.Text -> Context -> IO State
-enterContext state name ctx@(Chroot dir) = do
-  putStrLn $ "Entering chroot " ++ T.unpack dir
-  pure $ pushContext state name ctx
-enterContext state name ctx@(Directory dir) = do
-  putStrLn $ "Entering directory " ++ T.unpack dir
-  pure $ pushContext state name ctx
-enterContext state name ctx@(BracketCommands enterCommands _) = do
-  putStrLn $ "Entering " ++ T.unpack name
-  state' <- executeCommands state enterCommands
-  pure $ pushContext state' name ctx
+buildStep :: Stack -> Step -> IO ()
+buildStep stack (EnterContext _ ctx) =
+  handleEnterContext stack ctx
+buildStep stack (DownloadFile filename sha512sum downloadURL) =
+  downloadFile stack (T.unpack filename) (T.unpack sha512sum) (T.unpack downloadURL)
+buildStep stack (RunCommands (CommandStep cmd)) =
+  handleCommands stack cmd
+buildStep stack (RunCommands (CommandsStep cmd)) =
+  handleCommands stack cmd
+buildStep stack (WriteFile filename contents) =
+  F.writeFile stack filename contents
+buildStep _ (LeaveContext _) =
+  error "Unexpected LeaveContext in buildStep"
 
 
-leaveContext :: State -> T.Text -> IO State
-leaveContext state n =
-  case popContext state of
-    (state', Just (n', ctx)) | n == n' ->
-      leaveContext' state' ctx
-    (_, Nothing) ->
-      error "leaveContext: context stack mismatch (empty)"
-    (_, Just (_, _)) ->
-      pure state
-  where
-    leaveContext' :: State -> Context -> IO State
-    leaveContext' state (Chroot dir) = do
-      putStrLn $ "Leaving chroot " ++ T.unpack dir
-      pure state
-    leaveContext' state (Directory dir) = do
-      putStrLn $ "Leaving directory " ++ T.unpack dir
-      pure state
-    leaveContext' state (BracketCommands _ leaveCommands) = do
-      putStrLn $ "Leaving " ++ T.unpack n
-      catchFail state $ executeCommands state leaveCommands
+handleCommands :: Stack -> CommandOrCommands -> IO ()
+handleCommands stack (Command cmd) =
+  executeCommand stack cmd
+handleCommands stack (Commands cmds) =
+  mapM_ (handleCommands stack . Command) cmds
 
 
-leaveRemainingContexts :: State -> IO State
-leaveRemainingContexts state =
-  case contextStack state of
-    [] -> pure state
-    ((name, _):_) -> do
-      state' <- leaveContext state name
-      leaveRemainingContexts state'
+handleEnterContext :: Stack -> S.Context -> IO ()
+handleEnterContext stack (Chroot dir) =
+  putStrLn $ indent stack <> "Entering chroot: " <> T.unpack dir
+handleEnterContext stack (Directory dir) =
+  putStrLn $ indent stack <> "Entering directory: " <> T.unpack dir
+handleEnterContext stack (BracketCommands enterCmds _) =
+  handleCommands stack enterCmds
 
 
-runState :: State -> IO State
-runState state =
-  case stepsRemaining state of
-    [] -> leaveRemainingContexts state
-    step:stepsRemaining' ->
-      if failed state
-        then case step of
-          LeaveContext _ ->
-            doRunStep step stepsRemaining'
-          _ -> skipRunStep stepsRemaining'
-        else doRunStep step stepsRemaining'
-  where
-    doRunStep :: Step -> [Step] -> IO State
-    doRunStep step stepsRemaining' = do
-      state' <- catchFail state $ dispatchStep state step
-      runState $ state' { stepsRemaining = stepsRemaining' }
-    skipRunStep :: [Step] -> IO State
-    skipRunStep stepsRemaining' =
-      runState $ state { stepsRemaining = stepsRemaining' }
+handleLeaveContext :: Stack -> S.Context -> IO ()
+handleLeaveContext stack (Chroot dir) =
+  putStrLn $ indent stack <> "Leaving chroot: " <> T.unpack dir
+handleLeaveContext stack (Directory dir) =
+  putStrLn $ indent stack <> "Leaving directory: " <> T.unpack dir
+handleLeaveContext stack (BracketCommands _ leaveCmds) =
+  handleCommands stack leaveCmds

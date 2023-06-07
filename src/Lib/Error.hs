@@ -1,12 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Lib.Error
   ( BuildException(..)
-  , catchFail
   ) where
 
 import Control.Exception
-
-import Lib.State
 
 
 data BuildException
@@ -19,10 +16,3 @@ data BuildException
 
 
 instance Exception BuildException
-
-
-catchFail :: State -> IO State -> IO State
-catchFail state action = do
-  catch action $ \(e :: BuildException) -> do
-    putStrLn $ "  Caught exception: " ++ show e
-    pure $ state { failed = True }
